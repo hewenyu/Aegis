@@ -133,6 +133,15 @@ type Event struct {
 	Timestamp time.Time
 }
 
+func NewEvent(id string, t string, data interface{}) *Event {
+	return &Event{
+		ID:        id,
+		Type:      t,
+		Data:      data,
+		Timestamp: time.Now(),
+	}
+}
+
 // 错误定义
 var (
 	ErrAgentNotFound = errors.New("agent not found")

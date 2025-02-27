@@ -7,14 +7,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hewenyu/Aegis/internal/knowledge"
+	"github.com/hewenyu/Aegis/internal/memory"
+	"github.com/hewenyu/Aegis/internal/tool"
 )
 
 // Runtime 提供Agent的运行时环境
 type Runtime struct {
 	agent         *baseAgent
-	tools         []interface{} // 待后续替换为tool.Tool接口
-	memory        interface{}   // 待后续替换为memory.Store接口
-	knowledge     interface{}   // 待后续替换为knowledge.Context接口
+	tools         []tool.Tool
+	memory        memory.Store
+	knowledge     knowledge.Context
 	context       map[string]interface{}
 	executionMu   sync.Mutex
 	stopCh        chan struct{}
@@ -23,7 +26,7 @@ type Runtime struct {
 }
 
 // NewRuntime 创建新的Agent运行时
-func NewRuntime(agent *baseAgent, tools []interface{}, memory interface{}, knowledge interface{}) *Runtime {
+func NewRuntime(agent *baseAgent, tools []tool.Tool, memory memory.Store, knowledge knowledge.Context) *Runtime {
 	return &Runtime{
 		agent:         agent,
 		tools:         tools,
@@ -229,19 +232,80 @@ func (r *Runtime) handleAnalysis(ctx context.Context, task Task) (Result, error)
 
 // callTool 调用指定工具
 func (r *Runtime) callTool(ctx context.Context, toolID string, params map[string]interface{}) (interface{}, error) {
-	// TODO: 实现工具调用逻辑
-	// 找到对应工具并执行
-	return nil, fmt.Errorf("not implemented")
+	// 查找工具
+	var tool tool.Tool
+	for _, t := range r.tools {
+		if t.ID() == toolID {
+			tool = t
+			break
+		}
+	}
+
+	if tool == nil {
+		return nil, fmt.Errorf("tool not found: %s", toolID)
+	}
+
+	// 验证参数
+	if err := tool.Validate(params); err != nil {
+		return nil, fmt.Errorf("invalid parameters: %w", err)
+	}
+
+	// 记录工具调用事件
+	r.recordEvent(ctx, "tool_call_started", map[string]interface{}{
+		"tool_id": toolID,
+		"params":  params,
+	})
+
+	// 执行工具
+	startTime := time.Now()
+	result, err := tool.Execute(ctx, params)
+	duration := time.Since(startTime)
+
+	// 记录工具调用结果
+	if err != nil {
+		r.recordEvent(ctx, "tool_call_failed", map[string]interface{}{
+			"tool_id":  toolID,
+			"duration": duration.Milliseconds(),
+			"error":    err.Error(),
+		})
+		return nil, err
+	}
+
+	r.recordEvent(ctx, "tool_call_completed", map[string]interface{}{
+		"tool_id":  toolID,
+		"duration": duration.Milliseconds(),
+	})
+
+	// 存储工具调用记忆
+	if r.memory != nil {
+		mem := memory.Memory{
+			Type: memory.MemoryType("short_term"),
+			Content: map[string]interface{}{
+				"tool_id": toolID,
+				"params":  params,
+				"result":  result,
+			},
+			Importance: 0.5, // 中等重要性
+			Context: map[string]interface{}{
+				"agent_id": r.agent.id,
+				"tool_id":  toolID,
+			},
+			Timestamp: time.Now(),
+		}
+
+		go func(m memory.Memory) {
+			if err := r.memory.Store(context.Background(), m); err != nil {
+				fmt.Printf("Failed to store tool call memory: %v\n", err)
+			}
+		}(mem)
+	}
+
+	return result, nil
 }
 
 // recordEvent 记录事件
 func (r *Runtime) recordEvent(ctx context.Context, eventType string, data interface{}) {
-	event := Event{
-		ID:        uuid.New().String(),
-		Type:      eventType,
-		Data:      data,
-		Timestamp: time.Now(),
-	}
+	event := NewEvent(uuid.New().String(), eventType, data)
 
 	// TODO: 将事件记录到事件流
 	// 临时打印事件，避免未使用变量错误
@@ -252,12 +316,126 @@ func (r *Runtime) recordEvent(ctx context.Context, eventType string, data interf
 
 // recordMemory 记录到记忆
 func (r *Runtime) recordMemory(ctx context.Context, content interface{}, importance float64) error {
-	// TODO: 实现记忆存储逻辑
-	return nil
+	if r.memory == nil {
+		return fmt.Errorf("memory store not available")
+	}
+
+	mem := memory.Memory{
+		ID:         uuid.New().String(),
+		Type:       memory.MemoryType("short_term"),
+		Content:    content,
+		Importance: importance,
+		Context: map[string]interface{}{
+			"agent_id": r.agent.id,
+		},
+		Timestamp: time.Now(),
+	}
+
+	return r.memory.Store(ctx, mem)
 }
 
-// retrieveKnowledge 从知识库检索
-func (r *Runtime) retrieveKnowledge(ctx context.Context, query string, limit int) ([]interface{}, error) {
-	// TODO: 实现知识检索逻辑
-	return nil, nil
+// retrieveMemory 检索记忆
+func (r *Runtime) retrieveMemory(ctx context.Context, query memory.MemoryQuery) ([]memory.Memory, error) {
+	if r.memory == nil {
+		return nil, fmt.Errorf("memory store not available")
+	}
+
+	return r.memory.Recall(ctx, query)
+}
+
+// retrieveRecentMemories 检索最近的记忆
+func (r *Runtime) retrieveRecentMemories(ctx context.Context, limit int) ([]memory.Memory, error) {
+	query := memory.MemoryQuery{
+		Limit: limit,
+	}
+	return r.retrieveMemory(ctx, query)
+}
+
+// retrieveMemoriesByType 按类型检索记忆
+func (r *Runtime) retrieveMemoriesByType(ctx context.Context, memType memory.MemoryType, limit int) ([]memory.Memory, error) {
+	query := memory.MemoryQuery{
+		Type:  memType,
+		Limit: limit,
+	}
+	return r.retrieveMemory(ctx, query)
+}
+
+// retrieveMemoriesByContext 按上下文检索记忆
+func (r *Runtime) retrieveMemoriesByContext(ctx context.Context, contextKey string, contextValue interface{}, limit int) ([]memory.Memory, error) {
+	query := memory.MemoryQuery{
+		Context: map[string]interface{}{
+			contextKey: contextValue,
+		},
+		Limit: limit,
+	}
+	return r.retrieveMemory(ctx, query)
+}
+
+// retrieveImportantMemories 检索重要的记忆
+func (r *Runtime) retrieveImportantMemories(ctx context.Context, minImportance float64, limit int) ([]memory.Memory, error) {
+	query := memory.MemoryQuery{
+		Importance: minImportance,
+		Limit:      limit,
+	}
+	return r.retrieveMemory(ctx, query)
+}
+
+// retrieveKnowledge 从知识库检索信息
+func (r *Runtime) retrieveKnowledge(ctx context.Context, query string, limit int) ([]knowledge.Knowledge, error) {
+	if r.knowledge == nil {
+		return nil, fmt.Errorf("knowledge context not available")
+	}
+
+	// 执行语义搜索
+	results, err := r.knowledge.SemanticSearch(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("semantic search failed: %w", err)
+	}
+
+	return results, nil
+}
+
+// queryKnowledge 按条件查询知识
+func (r *Runtime) queryKnowledge(ctx context.Context, knowledgeType string, filter map[string]interface{}, limit int) ([]knowledge.Knowledge, error) {
+	if r.knowledge == nil {
+		return nil, fmt.Errorf("knowledge context not available")
+	}
+
+	query := knowledge.Query{
+		Type:   knowledgeType,
+		Filter: filter,
+		Limit:  limit,
+	}
+
+	results, err := r.knowledge.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("knowledge query failed: %w", err)
+	}
+
+	return results, nil
+}
+
+// addKnowledge 向知识库添加知识
+func (r *Runtime) addKnowledge(ctx context.Context, content interface{}, knowledgeType string, metadata map[string]interface{}) error {
+	if r.knowledge == nil {
+		return fmt.Errorf("knowledge context not available")
+	}
+
+	k := knowledge.Knowledge{
+		ID:       uuid.New().String(),
+		Type:     knowledgeType,
+		Content:  content,
+		Metadata: metadata,
+	}
+
+	return r.knowledge.AddKnowledge(ctx, k)
+}
+
+// getRelevantKnowledge 获取与文本相关的知识
+func (r *Runtime) getRelevantKnowledge(ctx context.Context, text string, limit int) ([]knowledge.Knowledge, error) {
+	if r.knowledge == nil {
+		return nil, fmt.Errorf("knowledge context not available")
+	}
+
+	return r.knowledge.GetRelevantKnowledge(ctx, text, limit)
 }

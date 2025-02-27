@@ -2,10 +2,14 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hewenyu/Aegis/internal/knowledge"
+	"github.com/hewenyu/Aegis/internal/memory"
+	"github.com/hewenyu/Aegis/internal/tool"
 )
 
 // manager 实现了Manager接口
@@ -14,13 +18,13 @@ type manager struct {
 	tasks     sync.Map
 	events    map[string]chan Event
 	eventsMu  sync.RWMutex
-	toolMgr   interface{} // tool.Manager 接口，后续实现
-	memoryMgr interface{} // memory.Manager 接口，后续实现
-	knowledge interface{} // knowledge.Base 接口，后续实现
+	toolMgr   tool.Manager
+	memoryMgr memory.Manager
+	knowledge knowledge.Base
 }
 
 // NewManager 创建一个新的Agent管理器
-func NewManager(toolMgr interface{}, memoryMgr interface{}, kb interface{}) Manager {
+func NewManager(toolMgr tool.Manager, memoryMgr memory.Manager, kb knowledge.Base) Manager {
 	return &manager{
 		toolMgr:   toolMgr,
 		memoryMgr: memoryMgr,
@@ -40,8 +44,23 @@ func (m *manager) CreateAgent(ctx context.Context, config AgentConfig) (Agent, e
 		return nil, err
 	}
 
-	// 初始化必要的组件
-	// 注意：这里只是示例，实际实现需要根据具体接口定义
+	// 创建记忆存储
+	memoryStore, err := m.createMemoryStore(ctx, config.Memory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create memory store: %w", err)
+	}
+
+	// 创建知识上下文
+	knowledgeCtx, err := m.createKnowledgeContext(ctx, config.Knowledge)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create knowledge context: %w", err)
+	}
+
+	// 获取工具
+	tools, err := m.getTools(ctx, config.Tools)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tools: %w", err)
+	}
 
 	// 创建agent
 	agent := &baseAgent{
@@ -52,8 +71,19 @@ func (m *manager) CreateAgent(ctx context.Context, config AgentConfig) (Agent, e
 			Status: "initialized",
 		},
 	}
+
+	// 创建运行时
+	runtime := NewRuntime(agent, tools, memoryStore, knowledgeCtx)
+	agent.runtime = runtime
+
+	// 初始化Agent
 	if err := agent.Initialize(ctx); err != nil {
 		return nil, err
+	}
+
+	// 启动运行时
+	if err := runtime.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start runtime: %w", err)
 	}
 
 	m.agents.Store(config.ID, agent)
@@ -63,7 +93,46 @@ func (m *manager) CreateAgent(ctx context.Context, config AgentConfig) (Agent, e
 	m.events[config.ID] = make(chan Event, 100) // 缓冲区大小可配置
 	m.eventsMu.Unlock()
 
+	// 发送Agent创建事件
+	m.emitEvent(config.ID, Event{
+		ID:        uuid.New().String(),
+		Type:      "agent_created",
+		Data:      config.ID,
+		Timestamp: time.Now(),
+	})
+
 	return agent, nil
+}
+
+// createMemoryStore 创建记忆存储
+func (m *manager) createMemoryStore(ctx context.Context, config MemoryConfig) (memory.Store, error) {
+	return m.memoryMgr.CreateStore(ctx, memory.MemoryConfig{
+		Type: config.Type,
+		Size: config.Size,
+	})
+}
+
+// createKnowledgeContext 创建知识上下文
+func (m *manager) createKnowledgeContext(ctx context.Context, config KnowledgeConfig) (knowledge.Context, error) {
+	return m.knowledge.CreateContext(ctx, knowledge.KnowledgeConfig{
+		Type:    config.Type,
+		Sources: config.Sources,
+	})
+}
+
+// getTools 获取工具列表
+func (m *manager) getTools(ctx context.Context, toolConfigs []ToolConfig) ([]tool.Tool, error) {
+	var tools []tool.Tool
+
+	for _, config := range toolConfigs {
+		t, err := m.toolMgr.GetTool(ctx, config.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tool %s: %w", config.ID, err)
+		}
+		tools = append(tools, t)
+	}
+
+	return tools, nil
 }
 
 // DestroyAgent 销毁一个Agent
@@ -302,31 +371,83 @@ func (m *manager) emitEvent(agentID string, event Event) {
 
 // baseAgent 是Agent接口的基本实现
 type baseAgent struct {
-	id     string
-	config AgentConfig
-	status AgentStatus
-	mu     sync.RWMutex
+	id      string
+	config  AgentConfig
+	status  AgentStatus
+	mu      sync.RWMutex
+	runtime *Runtime
 }
 
+// Initialize 初始化Agent
 func (a *baseAgent) Initialize(ctx context.Context) error {
-	// 基本初始化逻辑
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.status.Status = "ready"
+
+	// 记录初始化事件
+	if a.runtime != nil {
+		a.runtime.recordEvent(ctx, "agent_initialized", a.id)
+	}
+
 	return nil
 }
 
+// Execute 执行任务
 func (a *baseAgent) Execute(ctx context.Context, task Task) (Result, error) {
-	// 只是示例，实际实现需要根据Agent类型和任务类型
-	return Result{
-		Data:      map[string]interface{}{"message": "Task executed successfully"},
-		Metadata:  map[string]interface{}{"task_type": task.Type},
+	a.mu.Lock()
+	a.status.Status = "working"
+	a.status.CurrentTask = task.ID
+	a.mu.Unlock()
+
+	// 使用运行时执行任务
+	if a.runtime == nil {
+		return Result{}, fmt.Errorf("agent runtime not available")
+	}
+
+	if err := a.runtime.EnqueueTask(task); err != nil {
+		a.mu.Lock()
+		a.status.Status = "error"
+		a.mu.Unlock()
+		return Result{}, err
+	}
+
+	// 这里简化实现，实际上任务是异步执行的
+	// 真实情况下需要等待任务完成或实现回调机制
+
+	// 模拟简单结果
+	result := Result{
+		Data: map[string]interface{}{
+			"message": "Task received and processing",
+		},
+		Metadata: map[string]interface{}{
+			"task_id": task.ID,
+			"status":  "processing",
+		},
 		Timestamp: time.Now(),
-	}, nil
+	}
+
+	return result, nil
 }
 
+// Stop 停止Agent
 func (a *baseAgent) Stop(ctx context.Context) error {
-	// 停止逻辑
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.status.Status = "stopped"
+
+	// 停止运行时
+	if a.runtime != nil {
+		if err := a.runtime.Stop(ctx); err != nil {
+			return fmt.Errorf("failed to stop runtime: %w", err)
+		}
+	}
+
 	return nil
 }
 
+// Status 获取Agent状态
 func (a *baseAgent) Status() AgentStatus {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
