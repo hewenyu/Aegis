@@ -70,6 +70,41 @@ type VectorConfig struct {
 	Metric     string
 }
 
+// Document 向量存储文档
+type Document struct {
+	ID       string                 `json:"id"`
+	Content  string                 `json:"content"`
+	Metadata map[string]interface{} `json:"metadata"`
+	Vector   []float32              `json:"vector,omitempty"`
+}
+
+// SearchResult 搜索结果
+type SearchResult struct {
+	DocumentID string                 `json:"document_id"`
+	Content    string                 `json:"content"`
+	Metadata   map[string]interface{} `json:"metadata"`
+	Distance   float64                `json:"distance"`
+	Similarity float64                `json:"similarity"`
+}
+
+// VectorStore 向量存储接口
+type VectorStore interface {
+	// Add 添加文档到向量存储
+	Add(ctx context.Context, collectionName string, documents []Document) error
+
+	// Search 在向量存储中搜索相似文档
+	Search(ctx context.Context, collectionName, query string, limit int) ([]SearchResult, error)
+
+	// Delete 从向量存储中删除文档
+	Delete(ctx context.Context, collectionName string, documentIDs []string) error
+
+	// ListCollections 列出所有集合
+	ListCollections(ctx context.Context) ([]string, error)
+
+	// Close 关闭向量存储
+	Close() error
+}
+
 // 错误定义
 var (
 	ErrKnowledgeNotFound = errors.New("knowledge not found")
