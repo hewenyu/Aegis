@@ -34,35 +34,25 @@ func main() {
 	}
 
 	fmt.Println("可用模型:")
-	var embedModel string
+	chatModel := "deepseek-r1:14b"
+	embedModel := "mxbai-embed-large" // 使用完整的模型名称
 	for provider, providerModels := range models {
 		fmt.Printf("%s:\n", provider)
 		for _, model := range providerModels {
 			fmt.Printf("  - %s\n", model.Name)
-			if embedModel == "" || model.Name == "deepseek-r1:14b" {
-				embedModel = model.Name // 使用第一个模型或首选llama2
-			}
 		}
-	}
-
-	if embedModel == "" {
-		log.Fatalf("找不到可用的嵌入模型")
 	}
 
 	fmt.Printf("使用嵌入模型: %s\n", embedModel)
 
-	// 默认使用第一个
-	baseProvider := llmService.ListProviders()[0]
-
-	// 3. 创建LLM嵌入器
-	embedder := llm.NewLLMEmbedder(llmService, baseProvider, embedModel, 0)
-
-	// 4. 创建向量存储
-	fmt.Println("创建向量存储...")
-	vectorStore := knowledge.NewInMemoryVectorStore(embedder)
-
 	// 定义默认集合名称
 	defaultCollection := "default"
+	// 4. 创建向量存储
+	fmt.Println("创建向量存储...")
+	vectorStore, err := knowledge.NewChromaVectorStore(knowledge.DefaultVectorStoreConfig())
+	if err != nil {
+		log.Fatalf("创建向量存储失败: %v", err)
+	}
 
 	// 5. 添加一些知识
 	fmt.Println("创建知识实例...")
@@ -227,7 +217,7 @@ func main() {
 	}
 
 	fmt.Println("\n使用知识库内容回答问题...")
-	chatResponse, err := llmService.Chat(ctx, "ollama", embedModel, chatRequest)
+	chatResponse, err := llmService.Chat(ctx, "ollama", chatModel, chatRequest)
 	if err != nil {
 		log.Printf("聊天请求失败: %v\n", err)
 	} else {
