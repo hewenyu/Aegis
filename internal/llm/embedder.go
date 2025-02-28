@@ -3,6 +3,8 @@ package llm
 import (
 	"context"
 	"fmt"
+
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // LLMEmbedder 是一个使用LLM服务进行嵌入的Embedder实现
@@ -48,7 +50,7 @@ func (e *LLMEmbedder) Embed(ctx context.Context, content interface{}) ([]float64
 	}
 
 	// 创建嵌入请求
-	request := EmbeddingRequest{
+	request := types.EmbeddingRequest{
 		Input: textContent,
 	}
 

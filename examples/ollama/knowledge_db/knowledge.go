@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hewenyu/Aegis/internal/knowledge"
 	"github.com/hewenyu/Aegis/internal/llm"
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // Run 启动知识库示例
@@ -56,7 +57,7 @@ func main() {
 
 	// 5. 添加一些知识
 	fmt.Println("创建知识实例...")
-	knowledge1 := knowledge.Knowledge{
+	knowledge1 := types.Knowledge{
 		ID:      uuid.New().String(),
 		Type:    "concept",
 		Content: "向量数据库是一种专门设计用于存储和高效检索向量（嵌入）的数据库系统。",
@@ -66,7 +67,7 @@ func main() {
 		},
 	}
 
-	knowledge2 := knowledge.Knowledge{
+	knowledge2 := types.Knowledge{
 		ID:      uuid.New().String(),
 		Type:    "example",
 		Content: "Pinecone、Milvus和Weaviate是流行的向量数据库实现。",
@@ -76,7 +77,7 @@ func main() {
 		},
 	}
 
-	knowledge3 := knowledge.Knowledge{
+	knowledge3 := types.Knowledge{
 		ID:      uuid.New().String(),
 		Type:    "concept",
 		Content: "大语言模型(LLM)是一种基于深度学习的自然语言处理系统，能够理解和生成人类语言。",
@@ -86,7 +87,7 @@ func main() {
 		},
 	}
 
-	knowledge4 := knowledge.Knowledge{
+	knowledge4 := types.Knowledge{
 		ID:      uuid.New().String(),
 		Type:    "concept",
 		Content: "杭州2025 一月一日年天气晴朗",
@@ -101,7 +102,7 @@ func main() {
 	startTime := time.Now()
 
 	// 转换为文档并添加
-	docs := []knowledge.Document{
+	docs := []types.Document{
 		{
 			ID:      knowledge1.ID,
 			Content: fmt.Sprintf("%v", knowledge1.Content),
@@ -176,7 +177,7 @@ func main() {
 	}
 
 	// 手动过滤主题为"database"的结果
-	var filteredResults []knowledge.SearchResult
+	var filteredResults []types.SearchResult
 	for _, result := range databaseResults {
 		if topic, ok := result.Metadata["topic"].(string); ok && topic == "database" {
 			filteredResults = append(filteredResults, result)
@@ -189,8 +190,8 @@ func main() {
 	}
 
 	// 10. 使用LLM服务回答问题
-	chatRequest := llm.ChatRequest{
-		Messages: []llm.Message{
+	chatRequest := types.ChatRequest{
+		Messages: []types.Message{
 			{
 				Role:    "system",
 				Content: "你是一个有帮助的AI助手。请使用以下知识库内容回答用户问题。",

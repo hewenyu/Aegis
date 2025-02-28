@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // MemoryIndex 提供记忆的索引功能
 type MemoryIndex struct {
-	byType     map[MemoryType]map[string]struct{}
+	byType     map[types.MemoryType]map[string]struct{}
 	byContext  map[string]map[string]map[string]struct{} // context key -> value -> memory ID
 	byTimespan map[string]time.Time                      // memory ID -> timestamp
 	mu         sync.RWMutex
@@ -18,14 +20,14 @@ type MemoryIndex struct {
 // NewMemoryIndex 创建一个新的记忆索引
 func NewMemoryIndex() *MemoryIndex {
 	return &MemoryIndex{
-		byType:     make(map[MemoryType]map[string]struct{}),
+		byType:     make(map[types.MemoryType]map[string]struct{}),
 		byContext:  make(map[string]map[string]map[string]struct{}),
 		byTimespan: make(map[string]time.Time),
 	}
 }
 
 // AddMemory 将记忆添加到索引
-func (idx *MemoryIndex) AddMemory(m Memory) {
+func (idx *MemoryIndex) AddMemory(m types.Memory) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -54,7 +56,7 @@ func (idx *MemoryIndex) AddMemory(m Memory) {
 }
 
 // RemoveMemory 从索引中移除记忆
-func (idx *MemoryIndex) RemoveMemory(m Memory) {
+func (idx *MemoryIndex) RemoveMemory(m types.Memory) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -87,7 +89,7 @@ func (idx *MemoryIndex) RemoveMemory(m Memory) {
 }
 
 // FindByType 按类型查找记忆ID
-func (idx *MemoryIndex) FindByType(memType MemoryType) []string {
+func (idx *MemoryIndex) FindByType(memType types.MemoryType) []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
@@ -153,27 +155,27 @@ func toString(value interface{}) string {
 
 // MemoryRetriever 提供高级记忆检索功能
 type MemoryRetriever struct {
-	store Store
+	store types.Store
 }
 
 // NewMemoryRetriever 创建一个新的记忆检索器
-func NewMemoryRetriever(store Store) *MemoryRetriever {
+func NewMemoryRetriever(store types.Store) *MemoryRetriever {
 	return &MemoryRetriever{
 		store: store,
 	}
 }
 
 // GetRecentMemories 获取最近的记忆
-func (r *MemoryRetriever) GetRecentMemories(ctx context.Context, limit int) ([]Memory, error) {
-	query := MemoryQuery{
+func (r *MemoryRetriever) GetRecentMemories(ctx context.Context, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Limit: limit,
 	}
 	return r.store.Recall(ctx, query)
 }
 
 // GetRelevantMemories 获取与上下文相关的记忆
-func (r *MemoryRetriever) GetRelevantMemories(ctx context.Context, contextKey string, contextValue interface{}, limit int) ([]Memory, error) {
-	query := MemoryQuery{
+func (r *MemoryRetriever) GetRelevantMemories(ctx context.Context, contextKey string, contextValue interface{}, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Context: map[string]interface{}{
 			contextKey: contextValue,
 		},
@@ -183,8 +185,8 @@ func (r *MemoryRetriever) GetRelevantMemories(ctx context.Context, contextKey st
 }
 
 // GetImportantMemories 获取重要的记忆
-func (r *MemoryRetriever) GetImportantMemories(ctx context.Context, minImportance float64, limit int) ([]Memory, error) {
-	query := MemoryQuery{
+func (r *MemoryRetriever) GetImportantMemories(ctx context.Context, minImportance float64, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Importance: minImportance,
 		Limit:      limit,
 	}
@@ -192,8 +194,8 @@ func (r *MemoryRetriever) GetImportantMemories(ctx context.Context, minImportanc
 }
 
 // GetMemoriesByType 按类型获取记忆
-func (r *MemoryRetriever) GetMemoriesByType(ctx context.Context, memType MemoryType, limit int) ([]Memory, error) {
-	query := MemoryQuery{
+func (r *MemoryRetriever) GetMemoriesByType(ctx context.Context, memType types.MemoryType, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Type:  memType,
 		Limit: limit,
 	}
@@ -201,9 +203,9 @@ func (r *MemoryRetriever) GetMemoriesByType(ctx context.Context, memType MemoryT
 }
 
 // GetMemoriesByTimeRange 按时间范围获取记忆
-func (r *MemoryRetriever) GetMemoriesByTimeRange(ctx context.Context, start, end time.Time, limit int) ([]Memory, error) {
-	query := MemoryQuery{
-		TimeRange: TimeRange{
+func (r *MemoryRetriever) GetMemoriesByTimeRange(ctx context.Context, start, end time.Time, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
+		TimeRange: types.TimeRange{
 			Start: start,
 			End:   end,
 		},

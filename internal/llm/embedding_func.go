@@ -3,13 +3,14 @@ package llm
 import (
 	"context"
 
+	"github.com/hewenyu/Aegis/internal/types"
 	"github.com/philippgille/chromem-go"
 )
 
 // NewEmbeddingFunc 返回一个用于生成嵌入向量的函数
-func NewEmbeddingFunc(provider Provider) chromem.EmbeddingFunc {
+func NewEmbeddingFunc(provider types.Provider) chromem.EmbeddingFunc {
 	return func(ctx context.Context, text string) ([]float32, error) {
-		response, err := provider.Embed(ctx, provider.GetEmbedModel(), EmbeddingRequest{Input: text})
+		response, err := provider.Embed(ctx, provider.GetEmbedModel(), types.EmbeddingRequest{Input: text})
 		if err != nil {
 			return nil, err
 		}

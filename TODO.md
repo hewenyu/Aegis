@@ -49,7 +49,7 @@
 - [x] 设计高级向量存储接口
 - [x] 集成 chromem-go
 - [x] 实现内存和持久化存储选项
-- [x] 支持多种嵌入模型
+- [x] 支持多种嵌入模型（Ollama、OpenAI、Cohere、Mistral、LocalAI）
 
 ### 示例应用
 

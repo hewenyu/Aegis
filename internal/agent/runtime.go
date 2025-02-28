@@ -7,26 +7,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hewenyu/Aegis/internal/knowledge"
-	"github.com/hewenyu/Aegis/internal/memory"
 	"github.com/hewenyu/Aegis/internal/tool"
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // Runtime 提供Agent的运行时环境
 type Runtime struct {
 	agent         *baseAgent
 	tools         []tool.Tool
-	memory        memory.Store
-	knowledge     knowledge.Context
+	memory        types.Store
+	knowledge     types.Context
 	context       map[string]interface{}
 	executionMu   sync.Mutex
 	stopCh        chan struct{}
-	taskQueue     chan Task
+	taskQueue     chan types.Task
 	maxConcurrent int
 }
 
 // NewRuntime 创建新的Agent运行时
-func NewRuntime(agent *baseAgent, tools []tool.Tool, memory memory.Store, knowledge knowledge.Context) *Runtime {
+func NewRuntime(agent *baseAgent, tools []tool.Tool, memory types.Store, knowledge types.Context) *Runtime {
 	return &Runtime{
 		agent:         agent,
 		tools:         tools,
@@ -34,8 +33,8 @@ func NewRuntime(agent *baseAgent, tools []tool.Tool, memory memory.Store, knowle
 		knowledge:     knowledge,
 		context:       make(map[string]interface{}),
 		stopCh:        make(chan struct{}),
-		taskQueue:     make(chan Task, 10), // 任务队列缓冲区大小可配置
-		maxConcurrent: 1,                   // 默认单任务执行
+		taskQueue:     make(chan types.Task, 10), // 任务队列缓冲区大小可配置
+		maxConcurrent: 1,                         // 默认单任务执行
 	}
 }
 
@@ -56,7 +55,7 @@ func (r *Runtime) Stop(ctx context.Context) error {
 }
 
 // EnqueueTask 将任务加入队列
-func (r *Runtime) EnqueueTask(task Task) error {
+func (r *Runtime) EnqueueTask(task types.Task) error {
 	select {
 	case r.taskQueue <- task:
 		return nil
@@ -78,7 +77,7 @@ func (r *Runtime) taskWorker(ctx context.Context) {
 }
 
 // processTask 处理单个任务
-func (r *Runtime) processTask(ctx context.Context, task Task) {
+func (r *Runtime) processTask(ctx context.Context, task types.Task) {
 	// 建立任务执行上下文
 	taskCtx := r.createTaskContext(ctx, task)
 
@@ -103,7 +102,7 @@ func (r *Runtime) processTask(ctx context.Context, task Task) {
 }
 
 // createTaskContext 创建任务执行上下文
-func (r *Runtime) createTaskContext(ctx context.Context, task Task) context.Context {
+func (r *Runtime) createTaskContext(ctx context.Context, task types.Task) context.Context {
 	// 添加任务相关信息到上下文
 	taskCtx := context.WithValue(ctx, "task_id", task.ID)
 	taskCtx = context.WithValue(taskCtx, "agent_id", r.agent.id)
@@ -122,7 +121,7 @@ func (r *Runtime) createTaskContext(ctx context.Context, task Task) context.Cont
 }
 
 // executeTask 执行具体任务
-func (r *Runtime) executeTask(ctx context.Context, task Task) (Result, error) {
+func (r *Runtime) executeTask(ctx context.Context, task types.Task) (types.Result, error) {
 	r.executionMu.Lock()
 	defer r.executionMu.Unlock()
 
@@ -135,18 +134,18 @@ func (r *Runtime) executeTask(ctx context.Context, task Task) (Result, error) {
 	case "analysis":
 		return r.handleAnalysis(ctx, task)
 	default:
-		return Result{}, fmt.Errorf("unknown task type: %s", task.Type)
+		return types.Result{}, fmt.Errorf("unknown task type: %s", task.Type)
 	}
 }
 
 // 不同类型任务的处理函数
 
 // handleConversation 处理对话类型任务
-func (r *Runtime) handleConversation(ctx context.Context, task Task) (Result, error) {
+func (r *Runtime) handleConversation(ctx context.Context, task types.Task) (types.Result, error) {
 	// 从任务参数中获取必要信息
 	input, ok := task.Parameters["input"].(string)
 	if !ok {
-		return Result{}, fmt.Errorf("missing required parameter: input")
+		return types.Result{}, fmt.Errorf("missing required parameter: input")
 	}
 
 	// TODO: 实现对话处理逻辑
@@ -157,7 +156,7 @@ func (r *Runtime) handleConversation(ctx context.Context, task Task) (Result, er
 	// 示例响应
 	response := fmt.Sprintf("This is a response to: %s", input)
 
-	return Result{
+	return types.Result{
 		Data: map[string]interface{}{
 			"response": response,
 		},
@@ -170,11 +169,11 @@ func (r *Runtime) handleConversation(ctx context.Context, task Task) (Result, er
 }
 
 // handleResearch 处理研究类型任务
-func (r *Runtime) handleResearch(ctx context.Context, task Task) (Result, error) {
+func (r *Runtime) handleResearch(ctx context.Context, task types.Task) (types.Result, error) {
 	// 从任务参数中获取必要信息
 	topics, ok := task.Parameters["topics"].([]string)
 	if !ok {
-		return Result{}, fmt.Errorf("missing required parameter: topics")
+		return types.Result{}, fmt.Errorf("missing required parameter: topics")
 	}
 
 	// TODO: 实现研究处理逻辑
@@ -188,7 +187,7 @@ func (r *Runtime) handleResearch(ctx context.Context, task Task) (Result, error)
 		results[topic] = fmt.Sprintf("Research results for %s", topic)
 	}
 
-	return Result{
+	return types.Result{
 		Data: map[string]interface{}{
 			"research_results": results,
 		},
@@ -201,11 +200,11 @@ func (r *Runtime) handleResearch(ctx context.Context, task Task) (Result, error)
 }
 
 // handleAnalysis 处理分析类型任务
-func (r *Runtime) handleAnalysis(ctx context.Context, task Task) (Result, error) {
+func (r *Runtime) handleAnalysis(ctx context.Context, task types.Task) (types.Result, error) {
 	// 从任务参数中获取必要信息
 	data, ok := task.Parameters["data"]
 	if !ok {
-		return Result{}, fmt.Errorf("missing required parameter: data")
+		return types.Result{}, fmt.Errorf("missing required parameter: data")
 	}
 
 	// TODO: 实现分析处理逻辑
@@ -214,7 +213,7 @@ func (r *Runtime) handleAnalysis(ctx context.Context, task Task) (Result, error)
 	// 3. 生成结果
 
 	// 示例响应
-	return Result{
+	return types.Result{
 		Data: map[string]interface{}{
 			"analysis_result":    "Analysis completed successfully",
 			"summary":            "This is a summary of the analysis",
@@ -278,8 +277,8 @@ func (r *Runtime) callTool(ctx context.Context, toolID string, params map[string
 
 	// 存储工具调用记忆
 	if r.memory != nil {
-		mem := memory.Memory{
-			Type: memory.MemoryType("short_term"),
+		mem := types.Memory{
+			Type: types.MemoryType("short_term"),
 			Content: map[string]interface{}{
 				"tool_id": toolID,
 				"params":  params,
@@ -293,7 +292,7 @@ func (r *Runtime) callTool(ctx context.Context, toolID string, params map[string
 			Timestamp: time.Now(),
 		}
 
-		go func(m memory.Memory) {
+		go func(m types.Memory) {
 			if err := r.memory.Store(context.Background(), m); err != nil {
 				fmt.Printf("Failed to store tool call memory: %v\n", err)
 			}
@@ -320,9 +319,9 @@ func (r *Runtime) recordMemory(ctx context.Context, content interface{}, importa
 		return fmt.Errorf("memory store not available")
 	}
 
-	mem := memory.Memory{
+	mem := types.Memory{
 		ID:         uuid.New().String(),
-		Type:       memory.MemoryType("short_term"),
+		Type:       types.MemoryType("short_term"),
 		Content:    content,
 		Importance: importance,
 		Context: map[string]interface{}{
@@ -335,7 +334,7 @@ func (r *Runtime) recordMemory(ctx context.Context, content interface{}, importa
 }
 
 // retrieveMemory 检索记忆
-func (r *Runtime) retrieveMemory(ctx context.Context, query memory.MemoryQuery) ([]memory.Memory, error) {
+func (r *Runtime) retrieveMemory(ctx context.Context, query types.MemoryQuery) ([]types.Memory, error) {
 	if r.memory == nil {
 		return nil, fmt.Errorf("memory store not available")
 	}
@@ -344,16 +343,16 @@ func (r *Runtime) retrieveMemory(ctx context.Context, query memory.MemoryQuery) 
 }
 
 // retrieveRecentMemories 检索最近的记忆
-func (r *Runtime) retrieveRecentMemories(ctx context.Context, limit int) ([]memory.Memory, error) {
-	query := memory.MemoryQuery{
+func (r *Runtime) retrieveRecentMemories(ctx context.Context, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Limit: limit,
 	}
 	return r.retrieveMemory(ctx, query)
 }
 
 // retrieveMemoriesByType 按类型检索记忆
-func (r *Runtime) retrieveMemoriesByType(ctx context.Context, memType memory.MemoryType, limit int) ([]memory.Memory, error) {
-	query := memory.MemoryQuery{
+func (r *Runtime) retrieveMemoriesByType(ctx context.Context, memType types.MemoryType, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Type:  memType,
 		Limit: limit,
 	}
@@ -361,8 +360,8 @@ func (r *Runtime) retrieveMemoriesByType(ctx context.Context, memType memory.Mem
 }
 
 // retrieveMemoriesByContext 按上下文检索记忆
-func (r *Runtime) retrieveMemoriesByContext(ctx context.Context, contextKey string, contextValue interface{}, limit int) ([]memory.Memory, error) {
-	query := memory.MemoryQuery{
+func (r *Runtime) retrieveMemoriesByContext(ctx context.Context, contextKey string, contextValue interface{}, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Context: map[string]interface{}{
 			contextKey: contextValue,
 		},
@@ -372,8 +371,8 @@ func (r *Runtime) retrieveMemoriesByContext(ctx context.Context, contextKey stri
 }
 
 // retrieveImportantMemories 检索重要的记忆
-func (r *Runtime) retrieveImportantMemories(ctx context.Context, minImportance float64, limit int) ([]memory.Memory, error) {
-	query := memory.MemoryQuery{
+func (r *Runtime) retrieveImportantMemories(ctx context.Context, minImportance float64, limit int) ([]types.Memory, error) {
+	query := types.MemoryQuery{
 		Importance: minImportance,
 		Limit:      limit,
 	}
@@ -381,7 +380,7 @@ func (r *Runtime) retrieveImportantMemories(ctx context.Context, minImportance f
 }
 
 // retrieveKnowledge 从知识库检索信息
-func (r *Runtime) retrieveKnowledge(ctx context.Context, query string, limit int) ([]knowledge.Knowledge, error) {
+func (r *Runtime) retrieveKnowledge(ctx context.Context, query string, limit int) ([]types.Knowledge, error) {
 	if r.knowledge == nil {
 		return nil, fmt.Errorf("knowledge context not available")
 	}
@@ -396,12 +395,12 @@ func (r *Runtime) retrieveKnowledge(ctx context.Context, query string, limit int
 }
 
 // queryKnowledge 按条件查询知识
-func (r *Runtime) queryKnowledge(ctx context.Context, knowledgeType string, filter map[string]interface{}, limit int) ([]knowledge.Knowledge, error) {
+func (r *Runtime) queryKnowledge(ctx context.Context, knowledgeType string, filter map[string]interface{}, limit int) ([]types.Knowledge, error) {
 	if r.knowledge == nil {
 		return nil, fmt.Errorf("knowledge context not available")
 	}
 
-	query := knowledge.Query{
+	query := types.Query{
 		Type:   knowledgeType,
 		Filter: filter,
 		Limit:  limit,
@@ -421,7 +420,7 @@ func (r *Runtime) addKnowledge(ctx context.Context, content interface{}, knowled
 		return fmt.Errorf("knowledge context not available")
 	}
 
-	k := knowledge.Knowledge{
+	k := types.Knowledge{
 		ID:       uuid.New().String(),
 		Type:     knowledgeType,
 		Content:  content,
@@ -432,7 +431,7 @@ func (r *Runtime) addKnowledge(ctx context.Context, content interface{}, knowled
 }
 
 // getRelevantKnowledge 获取与文本相关的知识
-func (r *Runtime) getRelevantKnowledge(ctx context.Context, text string, limit int) ([]knowledge.Knowledge, error) {
+func (r *Runtime) getRelevantKnowledge(ctx context.Context, text string, limit int) ([]types.Knowledge, error) {
 	if r.knowledge == nil {
 		return nil, fmt.Errorf("knowledge context not available")
 	}

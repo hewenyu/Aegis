@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hewenyu/Aegis/internal/types"
 	"github.com/ollama/ollama/api"
 )
 
@@ -21,7 +22,7 @@ type OllamaProvider struct {
 }
 
 // NewOllamaProvider 创建一个新的Ollama提供者实例
-func NewOllamaProvider(endpoint string) (Provider, error) {
+func NewOllamaProvider(endpoint string) (types.Provider, error) {
 	endpointURL, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
@@ -44,15 +45,15 @@ func (p *OllamaProvider) GetEmbedModel() string {
 }
 
 // ListModels 返回可用的模型列表
-func (p *OllamaProvider) ListModels(ctx context.Context) ([]ModelInfo, error) {
+func (p *OllamaProvider) ListModels(ctx context.Context) ([]types.ModelInfo, error) {
 	models, err := p.client.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list models: %w", err)
 	}
 
-	var modelInfos []ModelInfo
+	var modelInfos []types.ModelInfo
 	for _, model := range models.Models {
-		modelInfos = append(modelInfos, ModelInfo{
+		modelInfos = append(modelInfos, types.ModelInfo{
 			Name:               model.Name,
 			ContextWindowSize:  4096,  // 默认值，可能需要根据模型调整
 			MaxOutputTokens:    2048,  // 默认值，可能需要根据模型调整
@@ -63,9 +64,9 @@ func (p *OllamaProvider) ListModels(ctx context.Context) ([]ModelInfo, error) {
 }
 
 // GetModel 返回指定模型的信息
-func (p *OllamaProvider) GetModel(ctx context.Context, modelID string) (ModelInfo, error) {
+func (p *OllamaProvider) GetModel(ctx context.Context, modelID string) (types.ModelInfo, error) {
 	// 目前返回默认的ModelInfo，因为Ollama API不提供详细的模型信息
-	return ModelInfo{
+	return types.ModelInfo{
 		Name:               modelID,
 		ContextWindowSize:  4096,
 		MaxOutputTokens:    2048,
@@ -74,7 +75,7 @@ func (p *OllamaProvider) GetModel(ctx context.Context, modelID string) (ModelInf
 }
 
 // Complete 生成文本补全
-func (p *OllamaProvider) Complete(ctx context.Context, modelID string, request CompletionRequest) (CompletionResponse, error) {
+func (p *OllamaProvider) Complete(ctx context.Context, modelID string, request types.CompletionRequest) (types.CompletionResponse, error) {
 	options := map[string]interface{}{
 		"temperature": float32(request.Temperature),
 		"top_p":       float32(request.TopP),
@@ -100,12 +101,12 @@ func (p *OllamaProvider) Complete(ctx context.Context, modelID string, request C
 	})
 
 	if err != nil {
-		return CompletionResponse{}, fmt.Errorf("failed to generate completion: %w", err)
+		return types.CompletionResponse{}, fmt.Errorf("failed to generate completion: %w", err)
 	}
 
-	return CompletionResponse{
+	return types.CompletionResponse{
 		Text: finalResponse,
-		Usage: Usage{
+		Usage: types.Usage{
 			PromptTokens:     promptEvalCount,
 			CompletionTokens: evalCount,
 			TotalTokens:      promptEvalCount + evalCount,
@@ -115,7 +116,7 @@ func (p *OllamaProvider) Complete(ctx context.Context, modelID string, request C
 }
 
 // Chat 处理聊天补全
-func (p *OllamaProvider) Chat(ctx context.Context, modelID string, request ChatRequest) (ChatResponse, error) {
+func (p *OllamaProvider) Chat(ctx context.Context, modelID string, request types.ChatRequest) (types.ChatResponse, error) {
 	messages := make([]api.Message, len(request.Messages))
 	for i, msg := range request.Messages {
 		messages[i] = api.Message{
@@ -148,7 +149,7 @@ func (p *OllamaProvider) Chat(ctx context.Context, modelID string, request ChatR
 	})
 
 	if err != nil {
-		return ChatResponse{}, fmt.Errorf("failed to generate chat response: %w", err)
+		return types.ChatResponse{}, fmt.Errorf("failed to generate chat response: %w", err)
 	}
 
 	// 使用累积的响应内容
@@ -156,12 +157,12 @@ func (p *OllamaProvider) Chat(ctx context.Context, modelID string, request ChatR
 		finalResponse.Message.Content = responseContent.String()
 	}
 
-	return ChatResponse{
-		Message: Message{
+	return types.ChatResponse{
+		Message: types.Message{
 			Role:    finalResponse.Message.Role,
 			Content: finalResponse.Message.Content,
 		},
-		Usage: Usage{
+		Usage: types.Usage{
 			PromptTokens:     finalResponse.PromptEvalCount,
 			CompletionTokens: finalResponse.EvalCount,
 			TotalTokens:      finalResponse.PromptEvalCount + finalResponse.EvalCount,
@@ -171,7 +172,7 @@ func (p *OllamaProvider) Chat(ctx context.Context, modelID string, request ChatR
 }
 
 // Embed 生成文本的嵌入向量
-func (p *OllamaProvider) Embed(ctx context.Context, modelID string, request EmbeddingRequest) (EmbeddingResponse, error) {
+func (p *OllamaProvider) Embed(ctx context.Context, modelID string, request types.EmbeddingRequest) (types.EmbeddingResponse, error) {
 	embedRequest := api.EmbeddingRequest{
 		Model:  modelID,
 		Prompt: request.Input,
@@ -179,12 +180,12 @@ func (p *OllamaProvider) Embed(ctx context.Context, modelID string, request Embe
 
 	response, err := p.client.Embeddings(ctx, &embedRequest)
 	if err != nil {
-		return EmbeddingResponse{}, fmt.Errorf("failed to generate embeddings: %w", err)
+		return types.EmbeddingResponse{}, fmt.Errorf("failed to generate embeddings: %w", err)
 	}
 
-	return EmbeddingResponse{
+	return types.EmbeddingResponse{
 		Embedding: response.Embedding,
-		Usage: Usage{
+		Usage: types.Usage{
 			PromptTokens: len(request.Input), // 近似的token计数
 			TotalTokens:  len(request.Input),
 		},
