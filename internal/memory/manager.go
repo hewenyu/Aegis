@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // manager 实现了Manager接口
@@ -17,15 +18,15 @@ type manager struct {
 }
 
 // NewManager 创建一个新的记忆管理器
-func NewManager() Manager {
+func NewManager() types.Manager {
 	return &manager{}
 }
 
 // CreateStore 创建一个新的记忆存储
-func (m *manager) CreateStore(ctx context.Context, config MemoryConfig) (Store, error) {
+func (m *manager) CreateStore(ctx context.Context, config types.MemoryConfig) (types.Store, error) {
 	storeID := uuid.New().String()
 
-	var store Store
+	var store types.Store
 	switch config.Type {
 	case "default", "":
 		store = NewInMemoryStore(storeID, config.Size)
@@ -38,18 +39,18 @@ func (m *manager) CreateStore(ctx context.Context, config MemoryConfig) (Store, 
 }
 
 // GetStore 获取指定ID的记忆存储
-func (m *manager) GetStore(ctx context.Context, storeID string) (Store, error) {
+func (m *manager) GetStore(ctx context.Context, storeID string) (types.Store, error) {
 	storeI, ok := m.stores.Load(storeID)
 	if !ok {
-		return nil, ErrStoreNotFound
+		return nil, types.ErrStoreNotFound
 	}
-	return storeI.(Store), nil
+	return storeI.(types.Store), nil
 }
 
 // DeleteStore 删除指定ID的记忆存储
 func (m *manager) DeleteStore(ctx context.Context, storeID string) error {
 	if _, ok := m.stores.Load(storeID); !ok {
-		return ErrStoreNotFound
+		return types.ErrStoreNotFound
 	}
 	m.stores.Delete(storeID)
 	return nil
@@ -70,12 +71,12 @@ type inMemoryStore struct {
 	id       string
 	memories sync.Map
 	maxSize  int
-	stats    MemoryStats
+	stats    types.MemoryStats
 	mu       sync.RWMutex
 }
 
 // NewInMemoryStore 创建一个新的内存记忆存储
-func NewInMemoryStore(id string, maxSize int) Store {
+func NewInMemoryStore(id string, maxSize int) types.Store {
 	if maxSize <= 0 {
 		maxSize = 1000 // 默认大小
 	}
@@ -86,7 +87,7 @@ func NewInMemoryStore(id string, maxSize int) Store {
 }
 
 // Store 存储记忆
-func (s *inMemoryStore) Store(ctx context.Context, m Memory) error {
+func (s *inMemoryStore) Store(ctx context.Context, m types.Memory) error {
 	if m.ID == "" {
 		m.ID = uuid.New().String()
 	}
@@ -107,11 +108,11 @@ func (s *inMemoryStore) Store(ctx context.Context, m Memory) error {
 	s.mu.Lock()
 	s.stats.TotalItems++
 	switch m.Type {
-	case ShortTerm:
+	case types.ShortTerm:
 		s.stats.ShortTerm++
-	case LongTerm:
+	case types.LongTerm:
 		s.stats.LongTerm++
-	case Working:
+	case types.Working:
 		s.stats.WorkingItems++
 	}
 	s.mu.Unlock()
@@ -125,17 +126,17 @@ func (s *inMemoryStore) Store(ctx context.Context, m Memory) error {
 }
 
 // Recall 检索记忆
-func (s *inMemoryStore) Recall(ctx context.Context, query MemoryQuery) ([]Memory, error) {
+func (s *inMemoryStore) Recall(ctx context.Context, query types.MemoryQuery) ([]types.Memory, error) {
 	if query.Limit <= 0 {
 		query.Limit = 10 // 默认限制
 	}
 
-	var result []Memory
+	var result []types.Memory
 	count := 0
 
 	// 遍历所有记忆
 	s.memories.Range(func(key, value interface{}) bool {
-		m := value.(Memory)
+		m := value.(types.Memory)
 
 		// 应用类型过滤
 		if query.Type != "" && m.Type != query.Type {
@@ -176,13 +177,13 @@ func (s *inMemoryStore) Recall(ctx context.Context, query MemoryQuery) ([]Memory
 }
 
 // Forget 删除记忆
-func (s *inMemoryStore) Forget(ctx context.Context, filter MemoryFilter) error {
+func (s *inMemoryStore) Forget(ctx context.Context, filter types.MemoryFilter) error {
 	var toDelete []string
 
 	// 找出要删除的记忆
 	s.memories.Range(func(key, value interface{}) bool {
 		id := key.(string)
-		m := value.(Memory)
+		m := value.(types.Memory)
 
 		// 如果指定了ID列表，只检查这些ID
 		if len(filter.IDs) > 0 {
@@ -231,15 +232,15 @@ func (s *inMemoryStore) Forget(ctx context.Context, filter MemoryFilter) error {
 
 	for _, id := range toDelete {
 		if memoryI, ok := s.memories.Load(id); ok {
-			memory := memoryI.(Memory)
+			memory := memoryI.(types.Memory)
 			s.memories.Delete(id)
 			s.stats.TotalItems--
 			switch memory.Type {
-			case ShortTerm:
+			case types.ShortTerm:
 				s.stats.ShortTerm--
-			case LongTerm:
+			case types.LongTerm:
 				s.stats.LongTerm--
-			case Working:
+			case types.Working:
 				s.stats.WorkingItems--
 			}
 		}
@@ -258,10 +259,10 @@ func (s *inMemoryStore) Consolidate(ctx context.Context) error {
 	}
 
 	// 获取所有短期记忆
-	var shortTermMemories []Memory
+	var shortTermMemories []types.Memory
 	s.memories.Range(func(key, value interface{}) bool {
-		m := value.(Memory)
-		if m.Type == ShortTerm {
+		m := value.(types.Memory)
+		if m.Type == types.ShortTerm {
 			shortTermMemories = append(shortTermMemories, m)
 		}
 		return true
@@ -293,7 +294,7 @@ func (s *inMemoryStore) Consolidate(ctx context.Context) error {
 }
 
 // GetStats 获取记忆统计信息
-func (s *inMemoryStore) GetStats(ctx context.Context) (MemoryStats, error) {
+func (s *inMemoryStore) GetStats(ctx context.Context) (types.MemoryStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.stats, nil
@@ -302,15 +303,15 @@ func (s *inMemoryStore) GetStats(ctx context.Context) (MemoryStats, error) {
 // 辅助函数
 
 // validateMemory 验证记忆是否有效
-func validateMemory(m Memory) error {
+func validateMemory(m types.Memory) error {
 	if m.Content == nil {
-		return ErrInvalidMemory
+		return types.ErrInvalidMemory
 	}
 	return nil
 }
 
 // matchesContext 检查记忆是否匹配上下文
-func matchesContext(m Memory, context map[string]interface{}) bool {
+func matchesContext(m types.Memory, context map[string]interface{}) bool {
 	if context == nil {
 		return true
 	}

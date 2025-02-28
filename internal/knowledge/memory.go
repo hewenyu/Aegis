@@ -5,32 +5,34 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // inMemoryVectorStore 是一个使用内存存储向量的简单实现
 type inMemoryVectorStore struct {
-	vectors  map[string][]Document // 按集合名称组织的文档集合
+	vectors  map[string][]types.Document // 按集合名称组织的文档集合
 	embedder Embedder
 	mu       sync.RWMutex
 }
 
 // NewInMemoryVectorStore 创建一个内存向量存储
-func NewInMemoryVectorStore(embedder Embedder) VectorStore {
+func NewInMemoryVectorStore(embedder Embedder) types.VectorStore {
 	return &inMemoryVectorStore{
-		vectors:  make(map[string][]Document),
+		vectors:  make(map[string][]types.Document),
 		embedder: embedder,
 		mu:       sync.RWMutex{},
 	}
 }
 
 // Add 添加文档到向量存储
-func (s *inMemoryVectorStore) Add(ctx context.Context, collectionName string, documents []Document) error {
+func (s *inMemoryVectorStore) Add(ctx context.Context, collectionName string, documents []types.Document) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// 确保集合存在
 	if _, exists := s.vectors[collectionName]; !exists {
-		s.vectors[collectionName] = make([]Document, 0)
+		s.vectors[collectionName] = make([]types.Document, 0)
 	}
 
 	// 添加或更新文档
@@ -63,7 +65,7 @@ func (s *inMemoryVectorStore) Add(ctx context.Context, collectionName string, do
 }
 
 // Search 在向量存储中搜索相似文档
-func (s *inMemoryVectorStore) Search(ctx context.Context, collectionName, query string, limit int) ([]SearchResult, error) {
+func (s *inMemoryVectorStore) Search(ctx context.Context, collectionName, query string, limit int) ([]types.SearchResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -81,7 +83,7 @@ func (s *inMemoryVectorStore) Search(ctx context.Context, collectionName, query 
 
 	// 计算每个文档与查询的相似度
 	type result struct {
-		doc        Document
+		doc        types.Document
 		similarity float64
 	}
 
@@ -110,9 +112,9 @@ func (s *inMemoryVectorStore) Search(ctx context.Context, collectionName, query 
 	}
 
 	// 构建响应
-	searchResults := make([]SearchResult, len(results))
+	searchResults := make([]types.SearchResult, len(results))
 	for i, r := range results {
-		searchResults[i] = SearchResult{
+		searchResults[i] = types.SearchResult{
 			DocumentID: r.doc.ID,
 			Content:    r.doc.Content,
 			Metadata:   r.doc.Metadata,
@@ -142,7 +144,7 @@ func (s *inMemoryVectorStore) Delete(ctx context.Context, collectionName string,
 	}
 
 	// 过滤掉要删除的文档
-	newDocs := make([]Document, 0, len(docs)-len(documentIDs))
+	newDocs := make([]types.Document, 0, len(docs)-len(documentIDs))
 	for _, doc := range docs {
 		if _, shouldDelete := idSet[doc.ID]; !shouldDelete {
 			newDocs = append(newDocs, doc)

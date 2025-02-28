@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hewenyu/Aegis/internal/knowledge"
-	"github.com/hewenyu/Aegis/internal/memory"
 	"github.com/hewenyu/Aegis/internal/tool"
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // manager 实现了Manager接口
@@ -19,12 +18,12 @@ type manager struct {
 	events    map[string]chan Event
 	eventsMu  sync.RWMutex
 	toolMgr   tool.Manager
-	memoryMgr memory.Manager
-	knowledge knowledge.Base
+	memoryMgr types.Manager
+	knowledge types.Base
 }
 
 // NewManager 创建一个新的Agent管理器
-func NewManager(toolMgr tool.Manager, memoryMgr memory.Manager, kb knowledge.Base) Manager {
+func NewManager(toolMgr tool.Manager, memoryMgr types.Manager, kb types.Base) Manager {
 	return &manager{
 		toolMgr:   toolMgr,
 		memoryMgr: memoryMgr,
@@ -34,7 +33,7 @@ func NewManager(toolMgr tool.Manager, memoryMgr memory.Manager, kb knowledge.Bas
 }
 
 // CreateAgent 创建一个新的Agent
-func (m *manager) CreateAgent(ctx context.Context, config AgentConfig) (Agent, error) {
+func (m *manager) CreateAgent(ctx context.Context, config AgentConfig) (types.Agent, error) {
 	if config.ID == "" {
 		config.ID = uuid.New().String()
 	}
@@ -66,7 +65,7 @@ func (m *manager) CreateAgent(ctx context.Context, config AgentConfig) (Agent, e
 	agent := &baseAgent{
 		id:     config.ID,
 		config: config,
-		status: AgentStatus{
+		status: types.AgentStatus{
 			ID:     config.ID,
 			Status: "initialized",
 		},
@@ -105,16 +104,13 @@ func (m *manager) CreateAgent(ctx context.Context, config AgentConfig) (Agent, e
 }
 
 // createMemoryStore 创建记忆存储
-func (m *manager) createMemoryStore(ctx context.Context, config MemoryConfig) (memory.Store, error) {
-	return m.memoryMgr.CreateStore(ctx, memory.MemoryConfig{
-		Type: config.Type,
-		Size: config.Size,
-	})
+func (m *manager) createMemoryStore(ctx context.Context, config types.MemoryConfig) (types.Store, error) {
+	return m.memoryMgr.CreateStore(ctx, config)
 }
 
 // createKnowledgeContext 创建知识上下文
-func (m *manager) createKnowledgeContext(ctx context.Context, config KnowledgeConfig) (knowledge.Context, error) {
-	return m.knowledge.CreateContext(ctx, knowledge.KnowledgeConfig{
+func (m *manager) createKnowledgeContext(ctx context.Context, config KnowledgeConfig) (types.Context, error) {
+	return m.knowledge.CreateContext(ctx, types.KnowledgeConfig{
 		Type:    config.Type,
 		Sources: config.Sources,
 	})
@@ -142,7 +138,7 @@ func (m *manager) DestroyAgent(ctx context.Context, agentID string) error {
 		return ErrAgentNotFound
 	}
 
-	agent := agentI.(Agent)
+	agent := agentI.(types.Agent)
 	if err := agent.Stop(ctx); err != nil {
 		return err
 	}
@@ -203,7 +199,7 @@ func (m *manager) ResumeAgent(ctx context.Context, agentID string) error {
 }
 
 // AssignTask 分配任务给Agent
-func (m *manager) AssignTask(ctx context.Context, agentID string, task Task) error {
+func (m *manager) AssignTask(ctx context.Context, agentID string, task types.Task) error {
 	agentI, ok := m.agents.Load(agentID)
 	if !ok {
 		return ErrAgentNotFound
@@ -214,7 +210,7 @@ func (m *manager) AssignTask(ctx context.Context, agentID string, task Task) err
 	}
 
 	// 存储任务初始状态
-	taskStatus := TaskStatus{
+	taskStatus := types.TaskStatus{
 		ID:        task.ID,
 		Status:    "pending",
 		Progress:  0.0,
@@ -232,7 +228,7 @@ func (m *manager) AssignTask(ctx context.Context, agentID string, task Task) err
 
 	// 异步执行任务
 	go func() {
-		agent := agentI.(Agent)
+		agent := agentI.(types.Agent)
 
 		// 更新Agent状态
 		if baseAgent, ok := agent.(*baseAgent); ok {
@@ -291,7 +287,7 @@ func (m *manager) CancelTask(ctx context.Context, taskID string) error {
 		return ErrTaskNotFound
 	}
 
-	taskStatus := taskI.(TaskStatus)
+	taskStatus := taskI.(types.TaskStatus)
 	if taskStatus.Status == "completed" || taskStatus.Status == "failed" {
 		return nil // 任务已经完成或失败，无需取消
 	}
@@ -307,23 +303,23 @@ func (m *manager) CancelTask(ctx context.Context, taskID string) error {
 }
 
 // GetTaskStatus 获取任务状态
-func (m *manager) GetTaskStatus(ctx context.Context, taskID string) (TaskStatus, error) {
+func (m *manager) GetTaskStatus(ctx context.Context, taskID string) (types.TaskStatus, error) {
 	taskI, ok := m.tasks.Load(taskID)
 	if !ok {
-		return TaskStatus{}, ErrTaskNotFound
+		return types.TaskStatus{}, ErrTaskNotFound
 	}
 
-	return taskI.(TaskStatus), nil
+	return taskI.(types.TaskStatus), nil
 }
 
 // GetAgentStatus 获取Agent状态
-func (m *manager) GetAgentStatus(ctx context.Context, agentID string) (AgentStatus, error) {
+func (m *manager) GetAgentStatus(ctx context.Context, agentID string) (types.AgentStatus, error) {
 	agentI, ok := m.agents.Load(agentID)
 	if !ok {
-		return AgentStatus{}, ErrAgentNotFound
+		return types.AgentStatus{}, ErrAgentNotFound
 	}
 
-	agent := agentI.(Agent)
+	agent := agentI.(types.Agent)
 	return agent.Status(), nil
 }
 
@@ -373,7 +369,7 @@ func (m *manager) emitEvent(agentID string, event Event) {
 type baseAgent struct {
 	id      string
 	config  AgentConfig
-	status  AgentStatus
+	status  types.AgentStatus
 	mu      sync.RWMutex
 	runtime *Runtime
 }
@@ -394,7 +390,7 @@ func (a *baseAgent) Initialize(ctx context.Context) error {
 }
 
 // Execute 执行任务
-func (a *baseAgent) Execute(ctx context.Context, task Task) (Result, error) {
+func (a *baseAgent) Execute(ctx context.Context, task types.Task) (types.Result, error) {
 	a.mu.Lock()
 	a.status.Status = "working"
 	a.status.CurrentTask = task.ID
@@ -402,21 +398,21 @@ func (a *baseAgent) Execute(ctx context.Context, task Task) (Result, error) {
 
 	// 使用运行时执行任务
 	if a.runtime == nil {
-		return Result{}, fmt.Errorf("agent runtime not available")
+		return types.Result{}, fmt.Errorf("agent runtime not available")
 	}
 
 	if err := a.runtime.EnqueueTask(task); err != nil {
 		a.mu.Lock()
 		a.status.Status = "error"
 		a.mu.Unlock()
-		return Result{}, err
+		return types.Result{}, err
 	}
 
 	// 这里简化实现，实际上任务是异步执行的
 	// 真实情况下需要等待任务完成或实现回调机制
 
 	// 模拟简单结果
-	result := Result{
+	result := types.Result{
 		Data: map[string]interface{}{
 			"message": "Task received and processing",
 		},
@@ -448,7 +444,7 @@ func (a *baseAgent) Stop(ctx context.Context) error {
 }
 
 // Status 获取Agent状态
-func (a *baseAgent) Status() AgentStatus {
+func (a *baseAgent) Status() types.AgentStatus {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.status

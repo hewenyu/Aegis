@@ -4,23 +4,25 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 // service 是Service接口的实现
 type service struct {
-	providers map[string]Provider
+	providers map[string]types.Provider
 	mu        sync.RWMutex
 }
 
 // NewService 创建一个新的LLM服务
 func NewService() Service {
 	return &service{
-		providers: make(map[string]Provider),
+		providers: make(map[string]types.Provider),
 	}
 }
 
 // RegisterProvider 注册一个LLM提供者
-func (s *service) RegisterProvider(provider Provider) error {
+func (s *service) RegisterProvider(provider types.Provider) error {
 	if provider == nil {
 		return fmt.Errorf("provider cannot be nil")
 	}
@@ -42,7 +44,7 @@ func (s *service) RegisterProvider(provider Provider) error {
 }
 
 // GetProvider 获取指定名称的LLM提供者
-func (s *service) GetProvider(name string) (Provider, error) {
+func (s *service) GetProvider(name string) (types.Provider, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -68,15 +70,15 @@ func (s *service) ListProviders() []string {
 }
 
 // ListModels 获取所有可用模型
-func (s *service) ListModels(ctx context.Context) (map[string][]ModelInfo, error) {
+func (s *service) ListModels(ctx context.Context) (map[string][]types.ModelInfo, error) {
 	s.mu.RLock()
-	providers := make(map[string]Provider, len(s.providers))
+	providers := make(map[string]types.Provider, len(s.providers))
 	for name, provider := range s.providers {
 		providers[name] = provider
 	}
 	s.mu.RUnlock()
 
-	result := make(map[string][]ModelInfo)
+	result := make(map[string][]types.ModelInfo)
 	for name, provider := range providers {
 		models, err := provider.ListModels(ctx)
 		if err != nil {
@@ -89,40 +91,40 @@ func (s *service) ListModels(ctx context.Context) (map[string][]ModelInfo, error
 }
 
 // GetModel 获取模型信息
-func (s *service) GetModel(ctx context.Context, providerName, modelID string) (ModelInfo, error) {
+func (s *service) GetModel(ctx context.Context, providerName, modelID string) (types.ModelInfo, error) {
 	provider, err := s.GetProvider(providerName)
 	if err != nil {
-		return ModelInfo{}, err
+		return types.ModelInfo{}, err
 	}
 
 	return provider.GetModel(ctx, modelID)
 }
 
 // Complete 执行文本补全
-func (s *service) Complete(ctx context.Context, providerName, modelID string, request CompletionRequest) (CompletionResponse, error) {
+func (s *service) Complete(ctx context.Context, providerName, modelID string, request types.CompletionRequest) (types.CompletionResponse, error) {
 	provider, err := s.GetProvider(providerName)
 	if err != nil {
-		return CompletionResponse{}, err
+		return types.CompletionResponse{}, err
 	}
 
 	return provider.Complete(ctx, modelID, request)
 }
 
 // Chat 执行聊天补全
-func (s *service) Chat(ctx context.Context, providerName, modelID string, request ChatRequest) (ChatResponse, error) {
+func (s *service) Chat(ctx context.Context, providerName, modelID string, request types.ChatRequest) (types.ChatResponse, error) {
 	provider, err := s.GetProvider(providerName)
 	if err != nil {
-		return ChatResponse{}, err
+		return types.ChatResponse{}, err
 	}
 
 	return provider.Chat(ctx, modelID, request)
 }
 
 // Embed 执行文本嵌入
-func (s *service) Embed(ctx context.Context, providerName, modelID string, request EmbeddingRequest) (EmbeddingResponse, error) {
+func (s *service) Embed(ctx context.Context, providerName, modelID string, request types.EmbeddingRequest) (types.EmbeddingResponse, error) {
 	provider, err := s.GetProvider(providerName)
 	if err != nil {
-		return EmbeddingResponse{}, err
+		return types.EmbeddingResponse{}, err
 	}
 
 	return provider.Embed(ctx, modelID, request)

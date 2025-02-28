@@ -1,4 +1,4 @@
-package knowledge
+package types
 
 import (
 	"context"
@@ -109,5 +109,4 @@ type VectorStore interface {
 var (
 	ErrKnowledgeNotFound = errors.New("knowledge not found")
 	ErrInvalidKnowledge  = errors.New("invalid knowledge")
-	ErrInvalidQuery      = errors.New("invalid query")
 )

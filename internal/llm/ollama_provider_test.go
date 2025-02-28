@@ -5,6 +5,8 @@ import (
 	"math"
 	"reflect"
 	"testing"
+
+	"github.com/hewenyu/Aegis/internal/types"
 )
 
 func TestOllamaProvider(t *testing.T) {
@@ -60,8 +62,8 @@ func TestOllamaProvider(t *testing.T) {
 	// 测试聊天功能
 	t.Run("测试聊天功能", func(t *testing.T) {
 		ctx := context.Background()
-		request := ChatRequest{
-			Messages: []Message{
+		request := types.ChatRequest{
+			Messages: []types.Message{
 				{
 					Role:    "user",
 					Content: "你好，请用一句话介绍自己",
@@ -89,7 +91,7 @@ func TestOllamaProvider(t *testing.T) {
 	// 测试文本补全
 	t.Run("测试文本补全", func(t *testing.T) {
 		ctx := context.Background()
-		request := CompletionRequest{
+		request := types.CompletionRequest{
 			Prompt:      "从前有座山，山里有座庙，庙里有个",
 			Temperature: 0.7,
 		}
@@ -138,7 +140,7 @@ func TestOllamaProvider(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				request := EmbeddingRequest{
+				request := types.EmbeddingRequest{
 					Input: tc.input,
 				}
 
@@ -189,8 +191,8 @@ func TestOllamaProviderError(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		_, err = provider.Chat(ctx, "不存在的模型", ChatRequest{
-			Messages: []Message{
+		_, err = provider.Chat(ctx, "不存在的模型", types.ChatRequest{
+			Messages: []types.Message{
 				{
 					Role:    "user",
 					Content: "你好",

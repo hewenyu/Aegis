@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/hewenyu/Aegis/internal/llm"
+	"github.com/hewenyu/Aegis/internal/types"
 	"github.com/philippgille/chromem-go"
 )
 
@@ -35,7 +36,7 @@ func DefaultVectorStoreConfig() VectorStoreConfig {
 }
 
 // NewChromaVectorStore 创建新的ChromaDB向量存储
-func NewChromaVectorStore(config VectorStoreConfig) (VectorStore, error) {
+func NewChromaVectorStore(config VectorStoreConfig) (types.VectorStore, error) {
 	var db *chromem.DB
 	var err error
 
@@ -125,7 +126,7 @@ func createEmbeddingFunc(config EmbeddingModelConfig) (chromem.EmbeddingFunc, er
 }
 
 // Add 添加文档到向量存储
-func (v *chromaVectorStore) Add(ctx context.Context, collectionName string, documents []Document) error {
+func (v *chromaVectorStore) Add(ctx context.Context, collectionName string, documents []types.Document) error {
 	collection, err := v.getOrCreateCollection(collectionName)
 	if err != nil {
 		return err
@@ -188,7 +189,7 @@ func (v *chromaVectorStore) Add(ctx context.Context, collectionName string, docu
 }
 
 // Search 在向量存储中搜索相似文档
-func (v *chromaVectorStore) Search(ctx context.Context, collectionName, query string, limit int) ([]SearchResult, error) {
+func (v *chromaVectorStore) Search(ctx context.Context, collectionName, query string, limit int) ([]types.SearchResult, error) {
 	// 使用 getOrCreateCollection 替代 getCollection
 	collection, err := v.getOrCreateCollection(collectionName)
 	if err != nil {
@@ -202,7 +203,7 @@ func (v *chromaVectorStore) Search(ctx context.Context, collectionName, query st
 	// 获取集合中的文档数量
 	count := collection.Count()
 	if count == 0 {
-		return []SearchResult{}, nil
+		return []types.SearchResult{}, nil
 	}
 
 	// 确保请求的结果数量不超过集合中的文档数量
@@ -217,14 +218,14 @@ func (v *chromaVectorStore) Search(ctx context.Context, collectionName, query st
 	}
 
 	// 转换结果
-	searchResults := make([]SearchResult, len(results))
+	searchResults := make([]types.SearchResult, len(results))
 	for i, result := range results {
 		metadata := make(map[string]interface{})
 		for k, v := range result.Metadata {
 			metadata[k] = v
 		}
 
-		searchResults[i] = SearchResult{
+		searchResults[i] = types.SearchResult{
 			DocumentID: result.ID,
 			Content:    result.Content,
 			Metadata:   metadata,
