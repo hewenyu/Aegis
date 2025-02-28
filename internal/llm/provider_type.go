@@ -21,6 +21,52 @@ type Message struct {
 	Context map[string]interface{} `json:"context,omitempty"`
 }
 
+// GenerateTextParams 定义生成文本的参数
+type GenerateTextParams struct {
+	Prompt          string                // 提示文本
+	SystemPrompt    string                // 系统提示文本
+	Model           string                // 使用的模型名称
+	Temperature     float64               // 生成的随机度 (0.0-1.0)
+	MaxTokens       int                   // 最大生成token数
+	TopP            float64               // 核采样概率阈值
+	Stop            []string              // 停止生成的标记
+	HistoryMessages []ChatMessage         // 聊天历史消息
+	Attachments     []ProcessedAttachment // 处理后的附件
+}
+
+// ChatMessage 表示聊天历史中的单条消息
+type ChatMessage struct {
+	Role    string // 角色 (system, user, assistant)
+	Content string // 消息内容
+}
+
+// Attachment 表示多模态输入中的附件
+type Attachment struct {
+	Type     string // 附件类型 (image, audio, etc)
+	Data     []byte // 附件数据
+	MimeType string // MIME类型
+	FileName string // 文件名
+}
+
+// ProcessedAttachment 表示经过处理的附件
+type ProcessedAttachment struct {
+	Type       string      // 附件类型
+	Data       interface{} // 处理后的数据
+	SourceName string      // 源文件名
+}
+
+// ModelInfo 包含LLM模型的详细信息
+type ModelInfo struct {
+	Name                  string  // 模型名称
+	ContextWindowSize     int     // 上下文窗口大小（token数）
+	MaxOutputTokens       int     // 最大输出token数
+	SupportsImageInput    bool    // 是否支持图像输入
+	SupportsAudioInput    bool    // 是否支持音频输入
+	SupportsVisionOutput  bool    // 是否支持视觉输出
+	PricingPerInputToken  float64 // 输入token的定价
+	PricingPerOutputToken float64 // 输出token的定价
+}
+
 // CompletionRequest 表示完成请求
 type CompletionRequest struct {
 	Prompt           string                 `json:"prompt"`
@@ -82,16 +128,6 @@ type Usage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// ModelInfo 表示LLM模型信息
-type ModelInfo struct {
-	ID           string                 `json:"id"`
-	Name         string                 `json:"name"`
-	Provider     string                 `json:"provider"`
-	Capabilities []string               `json:"capabilities"`
-	MaxTokens    int                    `json:"max_tokens"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
-}
-
 // Provider 表示LLM服务提供者接口
 type Provider interface {
 	// 获取提供者名称
@@ -111,31 +147,7 @@ type Provider interface {
 
 	// 文本嵌入
 	Embed(ctx context.Context, modelID string, request EmbeddingRequest) (EmbeddingResponse, error)
-}
 
-// Service 表示LLM服务接口
-type Service interface {
-	// 注册LLM提供者
-	RegisterProvider(provider Provider) error
-
-	// 获取LLM提供者
-	GetProvider(name string) (Provider, error)
-
-	// 列出所有可用的LLM提供者
-	ListProviders() []string
-
-	// 获取所有可用模型
-	ListModels(ctx context.Context) (map[string][]ModelInfo, error)
-
-	// 获取模型信息
-	GetModel(ctx context.Context, providerName, modelID string) (ModelInfo, error)
-
-	// 执行文本补全
-	Complete(ctx context.Context, providerName, modelID string, request CompletionRequest) (CompletionResponse, error)
-
-	// 执行聊天补全
-	Chat(ctx context.Context, providerName, modelID string, request ChatRequest) (ChatResponse, error)
-
-	// 执行文本嵌入
-	Embed(ctx context.Context, providerName, modelID string, request EmbeddingRequest) (EmbeddingResponse, error)
+	// GetEmbedModel 获取嵌入模型
+	GetEmbedModel() string
 }

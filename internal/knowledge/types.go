@@ -11,7 +11,7 @@ type Knowledge struct {
 	Type     string
 	Content  interface{}
 	Metadata map[string]interface{}
-	Vector   []float32
+	Vector   []float64
 }
 
 // Base 接口定义了知识库的基本操作
@@ -75,7 +75,7 @@ type Document struct {
 	ID       string                 `json:"id"`
 	Content  string                 `json:"content"`
 	Metadata map[string]interface{} `json:"metadata"`
-	Vector   []float32              `json:"vector,omitempty"`
+	Vector   []float64              `json:"vector,omitempty"`
 }
 
 // SearchResult 搜索结果

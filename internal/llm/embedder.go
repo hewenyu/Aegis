@@ -33,7 +33,7 @@ func (e *LLMEmbedder) SetMaxPoolSize(size int) {
 }
 
 // Embed 将内容转换为向量
-func (e *LLMEmbedder) Embed(ctx context.Context, content interface{}) ([]float32, error) {
+func (e *LLMEmbedder) Embed(ctx context.Context, content interface{}) ([]float64, error) {
 	// 将内容转换为字符串
 	var textContent string
 	switch c := content.(type) {
@@ -63,19 +63,13 @@ func (e *LLMEmbedder) Embed(ctx context.Context, content interface{}) ([]float32
 		return nil, fmt.Errorf("expected embedding dimension %d, got %d", e.dimensions, len(response.Embedding))
 	}
 
-	// 将float64转换为float32（因为我们的知识库系统使用float32）
-	float32Embedding := make([]float32, len(response.Embedding))
-	for i, v := range response.Embedding {
-		float32Embedding[i] = float32(v)
-	}
-
-	return float32Embedding, nil
+	return response.Embedding, nil
 }
 
 // BatchEmbed 批量将内容转换为向量
-func (e *LLMEmbedder) BatchEmbed(ctx context.Context, contents []interface{}) ([][]float32, error) {
+func (e *LLMEmbedder) BatchEmbed(ctx context.Context, contents []interface{}) ([][]float64, error) {
 	// 创建结果切片
-	results := make([][]float32, len(contents))
+	results := make([][]float64, len(contents))
 	errs := make([]error, len(contents))
 
 	// 使用有限的goroutine池来处理批量嵌入
